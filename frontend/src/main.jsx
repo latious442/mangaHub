@@ -19,6 +19,7 @@ import Userlogin from './Pages/Userlogin.jsx'
 import Admin_create from './Pages/Admin_create.jsx'
 import { AuthContextProvider } from './contexts/AuthContext.jsx'
 import Forget_pw from './Pages/Forget_pw.jsx'
+import Verify_agn from './Pages/Verify_agn.jsx'
 import AdminProtectedRoute from './components/AdminProtectedRoute.jsx'
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -41,6 +42,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="/view/:id" element={<View />} />
           <Route path="/admin/create" element={<AdminProtectedRoute><Admin_create/></AdminProtectedRoute>} />
           <Route path="/forget" element={<Forget_pw/>} />
+          <Route path="/otp-again" element={<Verify_agn/>} />
 
         </Routes>
       </AuthContextProvider>

@@ -48,7 +48,7 @@ export default function Nav() {
 )
 }
 
-          <li><NavLink to="/admin" className={linkClass}>Admin</NavLink></li>
+          
           {!!user&&(
             <>
             <li><NavLink to="/payment" className={linkClass}>Member</NavLink></li>

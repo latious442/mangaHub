@@ -9,6 +9,7 @@ const payRoutes = require('./routes/payRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const mongoose = require('mongoose');
 const nodemailer = require('nodemailer');
+const bcrypt = require('bcrypt');
 const { randomInt } = require('node:crypto');
 const User = require('./models/User');
 const Pay = require('./models/Pay');
@@ -53,7 +54,18 @@ const transporter = nodemailer.createTransport({
 });
 
 const otpByEmail = new Map()
+const passwordResetOtpByEmail = new Map()
 const OTP_TTL_MS = 10 * 60 * 1000
+const SALT_ROUNDS = 10
+const VIP_DURATIONS = {
+  '1m': { jwt: '30d', label: '1 month', maxAge: 30 * 24 * 60 * 60 * 1000 },
+  '2m': { jwt: '60d', label: '2 months', maxAge: 60 * 24 * 60 * 60 * 1000 },
+  '3m': { jwt: '90d', label: '3 months', maxAge: 90 * 24 * 60 * 60 * 1000 },
+}
+
+function normalizeVipDuration(duration) {
+  return VIP_DURATIONS[duration] || VIP_DURATIONS['1m']
+}
 
 function storePendingRegistration(email, { otp, name, password }) {
   otpByEmail.set(email.toLowerCase(), {
@@ -69,6 +81,23 @@ function getPendingRegistration(email) {
   if (!entry) return null
   if (Date.now() > entry.expiresAt) {
     otpByEmail.delete(email.toLowerCase())
+    return null
+  }
+  return entry
+}
+
+function storePendingPasswordReset(email, otp) {
+  passwordResetOtpByEmail.set(email.toLowerCase(), {
+    otp: String(otp),
+    expiresAt: Date.now() + OTP_TTL_MS,
+  })
+}
+
+function getPendingPasswordReset(email) {
+  const entry = passwordResetOtpByEmail.get(email.toLowerCase())
+  if (!entry) return null
+  if (Date.now() > entry.expiresAt) {
+    passwordResetOtpByEmail.delete(email.toLowerCase())
     return null
   }
   return entry
@@ -106,7 +135,7 @@ app.post('/send-email', async (req, res) => {
     if (String(password).length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' })
     }
-
+  
     const existingUser = await User.findOne({ email: trimmedEmail })
     if (existingUser) {
       return res.status(400).json({ error: 'email is already registered' })
@@ -135,9 +164,94 @@ app.post('/send-email', async (req, res) => {
   }
 })
 
+app.post('/send-email/again', async (req, res) => {
+  try {
+    const { email } = req.body
+    const trimmedEmail = String(email || '').trim().toLowerCase()
+    
+
+    if ( !trimmedEmail) {
+      return res.status(400).json({ error: 'Email is required' })
+    }
+
+  
+
+    const existingUser = await User.findOne({ email: trimmedEmail })
+    if (!existingUser) {
+      return res.status(404).json({ error: 'No account found with this email' })
+    }
+    
+
+    const otp = randomInt(1000, 9999)
+    storePendingPasswordReset(trimmedEmail, otp)
+
+    const info = await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: trimmedEmail,
+      subject: 'Your OTP code',
+      text: `Your OTP code is ${otp}`,
+      html: `<b>Your OTP code is ${otp}</b>`,
+    })
+
+    console.log('Message sent:', info.messageId)
+    return res.json({ ok: true, message: 'Email sent', id: info.messageId })
+  } catch (err) {
+    console.error('Error while sending mail:', err)
+    return res.status(500).json({ error: 'Send failed', detail: err.message })
+  }
+})
+
+app.post('/verify-otp/again', async (req, res) => {
+  try {
+    const { email, otp, password } = req.body
+    const trimmedEmail = String(email || '').trim().toLowerCase()
+
+    if (!trimmedEmail) {
+      return res.status(400).json({ ok: false, error: 'Email is required' })
+    }
+    if (!otp) {
+      return res.status(400).json({ ok: false, error: 'OTP is required' })
+    }
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' })
+    }
+
+    const pending = getPendingPasswordReset(trimmedEmail)
+    if (!pending) {
+      return res.status(401).json({ ok: false, error: 'OTP expired or not found. Please request a new code.' })
+    }
+
+    if (String(otp) !== pending.otp) {
+      return res.status(401).json({ ok: false, error: 'Wrong OTP' })
+    }
+
+    const hashedPassword = await bcrypt.hash(String(password), SALT_ROUNDS)
+    const user = await User.findOneAndUpdate(
+      { email: trimmedEmail },
+      { password: hashedPassword },
+      { new: true }
+    ).select('name email')
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'User not found' })
+    }
+
+    passwordResetOtpByEmail.delete(trimmedEmail)
+    return res.json({
+      ok: true,
+      message: 'Password reset successfully',
+      user: { id: user._id, name: user.name, email: user.email },
+    })
+  } catch (err) {
+    console.error('Error resetting password:', err)
+    return res.status(500).json({ ok: false, error: 'Password reset failed', detail: err.message })
+  }
+})
+
 app.post('/vip/access/:id', AdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    const duration = normalizeVipDuration(req.body?.duration);
     const payment = await Pay.findById(id).select('user username');
 
     if (!payment) {
@@ -146,9 +260,9 @@ app.post('/vip/access/:id', AdminMiddleware, async (req, res) => {
 
     const user = await User.findByIdAndUpdate(
       payment.user,
-      { vipInvitePending: true },
+      { vipInvitePending: true, vipDuration: duration.jwt },
       { new: true }
-    ).select('name email vipInvitePending');
+    ).select('name email vipInvitePending vipDuration');
 
     if (!user) {
       return res.status(404).json({ ok: false, error: 'User not found' });
@@ -156,12 +270,13 @@ app.post('/vip/access/:id', AdminMiddleware, async (req, res) => {
 
     return res.json({
       ok: true,
-      message: `VIP invite sent to ${user.name || payment.username}`,
+      message: `VIP invite sent to ${user.name || payment.username} for ${duration.label}`,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         vipInvitePending: user.vipInvitePending,
+        vipDuration: user.vipDuration,
       },
     });
   } catch (e) {
@@ -172,13 +287,14 @@ app.post('/vip/access/:id', AdminMiddleware, async (req, res) => {
 
 app.get('/vip/pending', AuthMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('vipInvitePending vipMember');
+    const user = await User.findById(req.user._id).select('vipInvitePending vipMember vipDuration');
     if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
 
     return res.json({
       ok: true,
       pending: Boolean(user.vipInvitePending),
       vipMember: Boolean(user.vipMember),
+      vipDuration: user.vipDuration,
     });
   } catch (e) {
     console.error('VIP pending error:', e);
@@ -188,7 +304,7 @@ app.get('/vip/pending', AuthMiddleware, async (req, res) => {
 
 app.post('/vip/accept', AuthMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('vipInvitePending vipMember');
+    const user = await User.findById(req.user._id).select('vipInvitePending vipMember vipDuration');
     if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
 
     if (!user.vipInvitePending && !user.vipMember) {
@@ -198,14 +314,51 @@ app.post('/vip/accept', AuthMiddleware, async (req, res) => {
     user.vipInvitePending = false;
     user.vipMember = true;
     await user.save();
-    const show = 1000*2;
-    const vip = vipToken(user._id,show);
-    setVipCookie(res, vip);
+    const duration = Object.values(VIP_DURATIONS).find((item) => item.jwt === user.vipDuration) || VIP_DURATIONS['1m'];
+    const vip = vipToken(user._id, duration.jwt);
+    setVipCookie(res, vip, duration.maxAge);
 
-    return res.json({ ok: true, vipToken: vip });
+    return res.json({ ok: true, vipToken: vip, vipDuration: duration.jwt });
   } catch (e) {
     console.error('VIP accept error:', e);
     return res.status(500).json({ ok: false, error: 'Failed to accept VIP invite' });
+  }
+});
+
+
+app.post('/vip/del/:id', AdminMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const payment = await Pay.findById(id).select('user username');
+    if (!payment) {
+      return res.status(404).json({ ok: false, error: 'Payment request not found' });
+    }
+
+    const user = await User.findById(payment.user).select('name vipInvitePending vipMember vipDuration');
+    if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
+
+    if (!user.vipInvitePending && !user.vipMember) {
+      return res.status(403).json({ ok: false, error: 'This user does not have VIP access or a pending invite' });
+    }
+
+    user.vipInvitePending = false;
+    user.vipMember = false;
+    user.vipDuration = '30d';
+    await user.save();
+
+    return res.json({
+      ok: true,
+      message: `VIP access removed from ${user.name || payment.username}`,
+      user: {
+        id: user._id,
+        name: user.name || payment.username,
+        vipInvitePending: user.vipInvitePending,
+        vipMember: user.vipMember,
+      },
+    });
+  } catch (e) {
+    console.error('VIP revoke error:', e);
+    return res.status(500).json({ ok: false, error: 'Failed to remove VIP access' });
   }
 });
 

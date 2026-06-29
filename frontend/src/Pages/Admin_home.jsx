@@ -1,164 +1,249 @@
-import React from 'react'
-import { NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { NavLink } from 'react-router-dom'
 import { API } from '../config/api'
+
+const durationOptions = [
+  { value: '1m', label: '1 month' },
+  { value: '2m', label: '2 months' },
+  { value: '3m', label: '3 months' },
+]
+
+const adminLinks = [
+  {
+    to: '/edit',
+    title: 'Edit Books',
+    copy: 'Update or delete manga entries.',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6M7.5 4.5h6l3 3v12h-9a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z" />
+    ),
+  },
+  {
+    to: '/add',
+    title: 'Add Books',
+    copy: 'Upload manga files and covers.',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m7-7H5" />
+    ),
+  },
+  {
+    to: '/user',
+    title: 'Users',
+    copy: 'View registered user accounts.',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 7.5a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.25a7.5 7.5 0 0 1 15 0" />
+    ),
+  },
+  {
+    to: '/setting',
+    title: 'Series',
+    copy: 'Create series and categories.',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 7.5h15M4.5 12h15M4.5 16.5h15" />
+    ),
+  },
+]
+
 export default function Admin_home() {
-const [paylist,setPaylist]=useState([]);
-const [visiblePayPhotos, setVisiblePayPhotos] = useState({});
-const [loading, setLoading] = useState(false);
-const [error, setError] = useState(null);
-const [vipInvites, setVipInvites] = useState({});
+  const [paylist, setPaylist] = useState([])
+  const [visiblePayPhotos, setVisiblePayPhotos] = useState({})
+  const [durations, setDurations] = useState({})
+  const [busyId, setBusyId] = useState('')
+  const [messages, setMessages] = useState({})
+  const [pageError, setPageError] = useState('')
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`${API}/pay/get`);
+        const response = await fetch(`${API}/pay/get`)
+        const result = await response.json().catch(() => [])
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          throw new Error(result.error || 'Failed to load payment requests')
         }
-        const result = await response.json();
-        setPaylist(result);
+        setPaylist(result)
       } catch (error) {
-        console.log(error);
-      } 
-    };
-    fetchData();
-  }, []);
-
-    async function handleSubmit(id) {
-      setLoading(true)
-      setError(null)
-      try {
-        const response = await fetch(`${API}/vip/access/${id}`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}`,
-          },
-        })
-
-        const result = await response.json().catch(() => ({}))
-
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to grant VIP')
-        }
-
-        setVipInvites(prev => ({ ...prev, [id]: result.message || 'VIP invite sent' }))
-      } catch (err) {
-        setError(err.message || 'Failed to grant VIP')
-      } finally {
-        setLoading(false)
+        setPageError(error.message || 'Failed to load payment requests')
       }
     }
-  
-  return (<>
-    <div className="align-items-center justify-content p-4 bg-gray-800">
-      <h1 className="text-2xl font-bold text-white">Admin Home</h1>
-    </div>
 
-    {/*for 4 button mother-frame */}
-    <div className="grid grid-cols-2 gap-4">
+    fetchData()
+  }, [])
 
-      {/*editing books*/}
-  <div className="card bg-gray-100 rounded-lg shadow-md p-6 max-w-sm mx-auto mt-10">
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-15">
-  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
-</svg>
+  async function grantVip(id) {
+    setBusyId(id)
+    setMessages((prev) => ({ ...prev, [id]: '' }))
 
-    <label className="block text-gray-700 font-bold mb-2 mt-4">editing books here</label>
-    <NavLink to="/edit" className="bg-purple-500 text-white p-2 rounded mt-2 hover:bg-purple-700">
-      Explore
-    </NavLink>
-    </div>
+    try {
+      const response = await fetch(`${API}/vip/access/${id}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}`,
+        },
+        body: JSON.stringify({
+          duration: durations[id] || '1m',
+        }),
+      })
 
- {/*adding books*/}
-   <div className="card bg-gray-100 rounded-lg shadow-md p-6 max-w-sm mx-auto mt-10">
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-15">
-  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-</svg>
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to grant VIP')
+      }
 
-    <label className="block text-gray-700 font-bold mb-2 mt-4">adding books here</label>
-    <NavLink to="/add" className="bg-purple-500 text-white p-2 rounded mt-2 hover:bg-purple-700">
-      Explore
-    </NavLink>
-    </div>
+      setMessages((prev) => ({ ...prev, [id]: result.message || 'VIP invite sent' }))
+    } catch (err) {
+      setMessages((prev) => ({ ...prev, [id]: err.message || 'Failed to grant VIP' }))
+    } finally {
+      setBusyId('')
+    }
+  }
 
+  async function revokeVip(id) {
+    setBusyId(id)
+    setMessages((prev) => ({ ...prev, [id]: '' }))
 
-{/*users*/}
-     <div className="card bg-gray-100 rounded-lg shadow-md p-6 max-w-sm mx-auto mt-10">
-     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-15">
-  <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
-</svg>
+    try {
+      const response = await fetch(`${API}/vip/del/${id}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}`,
+        },
+      })
 
-    <label className="block text-gray-700 font-bold mb-2 mt-4">users lists are here</label>
-    <NavLink to="/user" className="bg-purple-500 text-white p-2 rounded mt-2 hover:bg-purple-700">
-      Explore
-    </NavLink>
-    </div>
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to remove VIP')
+      }
 
-{/*members*/}
-     <div className="card bg-gray-100 rounded-lg shadow-md p-6 max-w-sm mx-auto mt-10">
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
-</svg>
+      setMessages((prev) => ({ ...prev, [id]: result.message || 'VIP access removed' }))
+    } catch (err) {
+      setMessages((prev) => ({ ...prev, [id]: err.message || 'Failed to remove VIP' }))
+    } finally {
+      setBusyId('')
+    }
+  }
 
-    <label className="block text-gray-700 font-bold mb-2 mt-4">member access here</label>
-    <NavLink to="/setting" className="bg-purple-500 text-white p-2 rounded mt-2 hover:bg-purple-700">
-      Explore
-    </NavLink>
-    </div>
-    </div>
-<br/>
-<br/>
+  return (
+    <main className="min-h-screen bg-gray-950 text-gray-100">
+      <section className="border-b border-gray-800 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-indigo-300">MangaHub Admin</p>
+            <h1 className="text-3xl font-bold tracking-normal text-white">Dashboard</h1>
+          </div>
+          <p className="text-sm text-gray-400">{paylist.length} payment request{paylist.length === 1 ? '' : 's'}</p>
+        </div>
+      </section>
 
-    <div className="bg-indigo-400 text-white rounded-xl p-4 align-items-center justify-content">
-      <ul>
-        {paylist.map((item)=>(
-          <li key={item._id} className="mb-4">
-            <div className="mb-2">
-              {item.username || 'Unknown user'} - {item.ph}
-            </div>
-            <button
-              type="button"
-              className="bg-white text-indigo-700 px-3 py-1 rounded mr-2"
-              onClick={() => {
-                setVisiblePayPhotos(prev => ({
-                  ...prev,
-                  [item._id]: !prev[item._id],
-                }))
-              }}
-            >
-              {visiblePayPhotos[item._id] ? 'Hide payment photo' : 'Show payment photo'}
-            </button>
-            {visiblePayPhotos[item._id] && (
-              <img
-                src={`${API}/uploads/${item.pay}`}
-                alt="Payment proof"
-                className="mt-3 max-w-full h-auto rounded shadow"
-              />
-            )}
-            <div className="mt-3">
-              <button
-                type="button"
-                className="bg-green-500 text-white px-3 py-1 rounded mr-2"
-                onClick={() => handleSubmit(item._id)}
-                disabled={loading}
-              >
-                {loading ? 'Processing...' : 'Grant VIP'}
-              </button>
-              {vipInvites[item._id] && (
-                <div className="mt-2 text-sm text-white">{vipInvites[item._id]}</div>
-              )}
-              {error && (
-                <div className="mt-2 text-sm text-red-200">Error: {error}</div>
-              )}
-            </div>
-          </li>
+      <section className="mx-auto grid max-w-7xl gap-4 px-4 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
+        {adminLinks.map((link) => (
+          <NavLink
+            key={link.to}
+            to={link.to}
+            className="rounded-lg border border-gray-800 bg-gray-900 p-4 transition hover:border-indigo-500 hover:bg-gray-900/80"
+          >
+            <svg className="h-8 w-8 text-indigo-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              {link.icon}
+            </svg>
+            <h2 className="mt-4 text-lg font-semibold text-white">{link.title}</h2>
+            <p className="mt-1 text-sm text-gray-400">{link.copy}</p>
+          </NavLink>
         ))}
-      </ul>
-    </div>
-    
-   
-  </>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-white">VIP Requests</h2>
+            <p className="text-sm text-gray-400">Choose a duration before sending a VIP invite.</p>
+          </div>
+        </div>
+
+        {pageError && (
+          <div className="mb-4 rounded-lg border border-red-500/40 bg-red-950/50 p-3 text-sm text-red-100">
+            {pageError}
+          </div>
+        )}
+
+        <div className="overflow-hidden rounded-lg border border-gray-800 bg-gray-900">
+          {paylist.length === 0 ? (
+            <p className="p-5 text-sm text-gray-400">No payment requests yet.</p>
+          ) : (
+            <ul className="divide-y divide-gray-800">
+              {paylist.map((item) => (
+                <li key={item._id} className="p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-white">{item.username || 'Unknown user'}</p>
+                      <p className="mt-1 text-sm text-gray-400">Phone: {item.ph || 'No phone number'}</p>
+                      {messages[item._id] && (
+                        <p className="mt-2 text-sm text-indigo-200">{messages[item._id]}</p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end">
+                      <select
+                        value={durations[item._id] || '1m'}
+                        onChange={(event) => {
+                          setDurations((prev) => ({ ...prev, [item._id]: event.target.value }))
+                        }}
+                        className="h-10 rounded-lg border border-gray-700 bg-gray-950 px-3 text-sm text-white focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                      >
+                        {durationOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        className="h-10 rounded-lg bg-emerald-500 px-4 text-sm font-medium text-gray-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => grantVip(item._id)}
+                        disabled={busyId === item._id}
+                      >
+                        {busyId === item._id ? 'Processing...' : 'Grant VIP'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="h-10 rounded-lg bg-red-500 px-4 text-sm font-medium text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => revokeVip(item._id)}
+                        disabled={busyId === item._id}
+                      >
+                        {busyId === item._id ? 'Processing...' : 'Back VIP'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="h-10 rounded-lg border border-gray-700 px-4 text-sm font-medium text-gray-100 hover:bg-gray-800"
+                        onClick={() => {
+                          setVisiblePayPhotos((prev) => ({
+                            ...prev,
+                            [item._id]: !prev[item._id],
+                          }))
+                        }}
+                      >
+                        {visiblePayPhotos[item._id] ? 'Hide Photo' : 'Show Photo'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {visiblePayPhotos[item._id] && (
+                    <div className="mt-4 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">
+                      <img
+                        src={`${API}/uploads/${item.pay}`}
+                        alt="Payment proof"
+                        className="max-h-[520px] w-full object-contain"
+                      />
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+    </main>
   )
 }

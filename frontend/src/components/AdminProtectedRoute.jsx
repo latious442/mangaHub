@@ -1,36 +1,55 @@
+import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-
-function getJwtPayload(token) {
-  try {
-    const payload = token.split('.')[1]
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const padded = normalized.padEnd(normalized.length + (4 - normalized.length % 4) % 4, '=')
-    return JSON.parse(window.atob(padded))
-  } catch {
-    return null
-  }
-}
-
-function hasAdminToken() {
-  const token = localStorage.getItem('adminToken')
-  if (!token) return false
-
-  const payload = getJwtPayload(token)
-  if (!payload || payload.role !== 'admin') return false
-
-  if (payload.exp && payload.exp * 1000 <= Date.now()) {
-    localStorage.removeItem('adminToken')
-    localStorage.removeItem('admin')
-    return false
-  }
-
-  return true
-}
+import axios from 'axios'
+import { API } from '../config/api'
 
 export default function AdminProtectedRoute({ children }) {
   const location = useLocation()
+  const [status, setStatus] = useState('checking')
 
-  if (!hasAdminToken()) {
+  useEffect(() => {
+    let active = true
+    const token = localStorage.getItem('adminToken')
+
+    if (!token) {
+      setStatus('invalid')
+      return undefined
+    }
+
+    axios.get(`${API}/admin/me`, {
+      withCredentials: true,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }).then((response) => {
+      if (!active) return
+      if (response.data?.ok) {
+        localStorage.setItem('admin', JSON.stringify(response.data.admin))
+        setStatus('valid')
+      } else {
+        setStatus('invalid')
+      }
+    }).catch(() => {
+      if (!active) return
+      localStorage.removeItem('adminToken')
+      localStorage.removeItem('admin')
+      setStatus('invalid')
+    })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  if (status === 'checking') {
+    return (
+      <main className="min-h-screen bg-gray-950 px-4 py-12 text-center text-gray-100">
+        Checking admin access...
+      </main>
+    )
+  }
+
+  if (status !== 'valid') {
     return <Navigate to="/admin" replace state={{ from: location }} />
   }
 

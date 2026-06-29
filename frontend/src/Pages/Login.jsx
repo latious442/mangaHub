@@ -55,7 +55,7 @@ export default function Login() {
     }
   }
   function forget(e){
-    e.preventDefault;
+    e.preventDefault();
     navigate('/forget');
   }
 

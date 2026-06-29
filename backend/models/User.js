@@ -28,6 +28,11 @@ const userSchema = new mongoose.Schema({
     vipMember: {
         type: Boolean,
         default: false,
+    },
+    vipDuration: {
+        type: String,
+        enum: ['30d', '60d', '90d'],
+        default: '30d',
     }
 });
 

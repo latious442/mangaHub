@@ -4,8 +4,7 @@ const secret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'kothit
 
 const AdminMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization || '';
-    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const token = bearerToken || req.cookies?.adminJwt;
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
 
     if (!token) {
         return res.status(401).json({ message: 'Admin authentication required' });

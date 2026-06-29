@@ -1,11 +1,27 @@
 import React from 'react'
 import { useState, useEffect } from 'react'
 import { API } from '../../config/api'
+import axios from 'axios'
 
 export default function User() {
   const [book, setBook] = useState([])
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+async function handleSubmit(userId) {
+  try {
+    await axios.delete(`${API}/del/${userId}`, {
+      withCredentials: true,
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}`,
+      },
+    })
+    setBook((prev) => prev.filter((item) => item._id !== userId))
+  } catch (error) {
+    console.error('Delete failed:', error)
+    setError(error)
+  }
+}
 
   useEffect(() => {
     const fetchData = async () => {
@@ -61,7 +77,7 @@ export default function User() {
                 <tr key={item._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.name}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.email}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{item._id}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400"><button onClick={()=>handleSubmit(item._id)}>del</button></td>
                 </tr>
               ))
             ) : (

@@ -40,10 +40,10 @@ function setAdminJwtCookie(res, token) {
 
 
 
-function setVipCookie(res, token) {
+function setVipCookie(res, token, maxAge = COOKIE_MAX_AGE) {
     res.cookie('vip', token, {
         ...getJwtCookieOptions(),
-        maxAge: COOKIE_MAX_AGE,
+        maxAge,
     });
 }
 

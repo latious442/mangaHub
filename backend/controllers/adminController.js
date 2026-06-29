@@ -66,4 +66,18 @@ async function loginAdmin(req, res) {
     }
 }
 
-module.exports = { createAdmin, loginAdmin };
+async function currentAdmin(req, res) {
+    try {
+        const admin = await Admin.findById(req.admin._id).select('name');
+        if (!admin) {
+            return res.status(404).json({ error: 'Admin not found' });
+        }
+
+        return res.json({ ok: true, admin: { id: admin._id, name: admin.name } });
+    } catch (error) {
+        console.error('Error fetching admin:', error);
+        return res.status(500).json({ error: 'Failed to fetch admin' });
+    }
+}
+
+module.exports = { createAdmin, loginAdmin, currentAdmin };

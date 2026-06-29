@@ -34,7 +34,12 @@ export default function Setting() {
       formData.append('photo', e.target.photo.files[0])
       formData.append('sort', JSON.stringify(sort))  // Send the sort array as JSON
 
-      await axios.post(`${API}/serie/create`, formData)
+      await axios.post(`${API}/serie/create`, formData, {
+        withCredentials: true,
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('adminToken') || ''}`,
+        },
+      })
       alert('added successfully')
       
       // Reset form after successful submission
