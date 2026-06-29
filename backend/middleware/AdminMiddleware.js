@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const secret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'kothitsar';
+const secret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET;
 
 const AdminMiddleware = (req, res, next) => {
     const authHeader = req.headers.authorization || '';

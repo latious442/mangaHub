@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { API } from '../config/api'
+import { API, assetUrl } from '../config/api'
 
 const durationOptions = [
   { value: '1m', label: '1 month' },
@@ -232,7 +232,7 @@ export default function Admin_home() {
                   {visiblePayPhotos[item._id] && (
                     <div className="mt-4 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">
                       <img
-                        src={`${API}/uploads/${item.pay}`}
+                        src={assetUrl(item.pay)}
                         alt="Payment proof"
                         className="max-h-[520px] w-full object-contain"
                       />

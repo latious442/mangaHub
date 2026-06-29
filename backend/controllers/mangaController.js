@@ -2,51 +2,10 @@ const Book = require('../models/Book');
 const Serie = require('../models/Serie');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const fs = require('fs').promises;
-const path = require('path');
+const { put, del } = require('@vercel/blob');
 
-const vipSecret = process.env.JWT_SECRET || 'latioustuturu';
-const loginSecret = process.env.JWT_SECRET || 'myooo';
-const uploadsRoot = path.join(__dirname, '../public/uploads');
-
-const safeFolderName = (name) => {
-    const folderName = String(name || '')
-        .trim()
-        .replace(/[^a-zA-Z0-9-_]/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_+|_+$/g, '');
-
-    return folderName || String(Date.now());
-};
-
-const removeFileIfExists = async (filePath) => {
-    try {
-        await fs.unlink(filePath);
-    } catch (error) {
-        if (error.code !== 'ENOENT') {
-            throw error;
-        }
-    }
-};
-
-const cleanupUploadedFiles = async (...files) => {
-    await Promise.all(
-        files
-            .filter(Boolean)
-            .map((file) => removeFileIfExists(path.join(uploadsRoot, file.filename)))
-    );
-};
-
-const moveUploadedFile = async (file, destinationFolder) => {
-    const fromPath = path.join(uploadsRoot, file.filename);
-    const toPath = path.join(destinationFolder, file.filename);
-
-    await fs.rename(fromPath, toPath);
-};
-
-const uploadPathForDb = (folderName, fileName) => {
-    return path.join(folderName, fileName).replace(/\\/g, '/');
-};
+const vipSecret = process.env.JWT_SECRET;
+const loginSecret = process.env.JWT_SECRET;
 
 async function hasVipAccess(req) {
     const token = req.cookies?.vip;
@@ -132,8 +91,8 @@ const delManga = async(req,res)=>{
             return res.status(404).json({ error: 'Manga not found' });
         }
         await Promise.all([
-            manga.manga ? removeFileIfExists(path.join(uploadsRoot, manga.manga)) : null,
-            manga.image ? removeFileIfExists(path.join(uploadsRoot, manga.image)) : null,
+            manga.manga?.startsWith('http') ? del(manga.manga) : null,
+            manga.image?.startsWith('http') ? del(manga.image) : null,
         ]);
         res.json(manga);
     } catch (error) {
@@ -146,8 +105,6 @@ const delManga = async(req,res)=>{
 const createBook = async (req, res) => {
     const mangaFile = req.files?.manga?.[0];
     const imageFile = req.files?.image?.[0];
-    let movedMangaPath = null;
-    let movedImagePath = null;
 
     try {
         const { name, access , seriesId, serie: serieNameFromBody } = req.body;
@@ -155,7 +112,6 @@ const createBook = async (req, res) => {
         let { selectedSeriesCategories } = req.body;
 
         if (!name || !mangaFile || !imageFile) {
-            await cleanupUploadedFiles(mangaFile, imageFile);
             return res.status(400).json({ error: 'Name, manga file, and image are required' });
         }
 
@@ -164,7 +120,6 @@ const createBook = async (req, res) => {
                 selectedSeriesCategories = JSON.parse(selectedSeriesCategories);
             }
         } catch (error) {
-            await cleanupUploadedFiles(mangaFile, imageFile);
             return res.status(400).json({ error: 'Invalid series categories JSON' });
         }
 
@@ -172,7 +127,6 @@ const createBook = async (req, res) => {
         if (seriesId) {
             serieDoc = await Serie.findById(seriesId).lean();
             if (!serieDoc) {
-                await cleanupUploadedFiles(mangaFile, imageFile);
                 return res.status(404).json({ error: 'Serie not found' });
             }
         }
@@ -186,42 +140,33 @@ const createBook = async (req, res) => {
         }
 
         if (!Array.isArray(selectedSeriesCategories) || selectedSeriesCategories.length === 0) {
-            await cleanupUploadedFiles(mangaFile, imageFile);
             return res.status(400).json({ error: 'Series categories are required' });
         }
 
         if (!serie) {
-            await cleanupUploadedFiles(mangaFile, imageFile);
             return res.status(400).json({ error: 'Serie name is required' });
         }
 
-        const serieFolderName = safeFolderName(serie);
-        const serieDir = path.join(uploadsRoot, serieFolderName);
-
-        await fs.mkdir(serieDir, { recursive: true });
-        await Promise.all([
-            moveUploadedFile(mangaFile, serieDir),
-            moveUploadedFile(imageFile, serieDir),
-        ]);
-        movedMangaPath = path.join(serieDir, mangaFile.filename);
-        movedImagePath = path.join(serieDir, imageFile.filename);
+        const timestamp = Date.now();
+        const mangaBlob = await put(`manga/${timestamp}-${mangaFile.originalname}`, mangaFile.buffer, {
+            access: 'public',
+        });
+        const imageBlob = await put(`images/${timestamp}-${imageFile.originalname}`, imageFile.buffer, {
+            access: 'public',
+        });
 
         const book = await Book.create({
             name: String(name).trim(),
             access,
             serie,
             selectedSeriesCategories,
-            manga: uploadPathForDb(serieFolderName, mangaFile.filename),
-            image: uploadPathForDb(serieFolderName, imageFile.filename),
+            manga: mangaBlob.url,
+            image: imageBlob.url,
         });
 
         res.status(201).json(book);
     } catch (error) {
         console.error('Error creating book:', error);
-        await Promise.all([
-            mangaFile ? removeFileIfExists(movedMangaPath || path.join(uploadsRoot, mangaFile.filename)) : null,
-            imageFile ? removeFileIfExists(movedImagePath || path.join(uploadsRoot, imageFile.filename)) : null,
-        ]);
         res.status(500).json({ error: 'Failed to create book' });
     }
 };

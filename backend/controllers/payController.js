@@ -1,5 +1,6 @@
 const Pay = require('../models/Pay');
 const User = require('../models/User');
+const { put } = require('@vercel/blob');
 
 const postPay = async (req, res) => {
   try {
@@ -15,11 +16,15 @@ const postPay = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    const payBlob = await put(`payments/${Date.now()}-${payFile.originalname}`, payFile.buffer, {
+      access: 'public',
+    });
+
     const newPay = await Pay.create({
       username: user.name,
       user: user._id,
       ph,
-      pay: payFile.filename,
+      pay: payBlob.url,
     });
     console.log('payment posted');
     res.status(201).json(newPay);

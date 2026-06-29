@@ -1,38 +1,5 @@
-const fs = require('fs').promises;
-const path = require('path');
 const Serie = require('../models/Serie');
-
-const uploadsRoot = path.join(__dirname, '../public/uploads');
-
-const safeFolderName = (name) => {
-  const folderName = String(name || '')
-    .trim()
-    .replace(/[^a-zA-Z0-9-_]/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '');
-
-  return folderName || String(Date.now());
-};
-
-const removeFileIfExists = async (filePath) => {
-  try {
-    await fs.unlink(filePath);
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-  }
-};
-
-const removeFolderIfExists = async (folderPath) => {
-  try {
-    await fs.rm(folderPath, { recursive: true, force: true });
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-  }
-};
+const { put, del } = require('@vercel/blob');
 
 const parseSort = (sort) => {
   if (Array.isArray(sort)) {
@@ -48,7 +15,6 @@ const parseSort = (sort) => {
 
 const postSerie = async (req, res) => {
   const photoFile = req.file;
-  const uploadedPhotoPath = photoFile ? path.join(uploadsRoot, photoFile.filename) : null;
 
   try {
     const name = String(req.body.name || '').trim();
@@ -57,26 +23,21 @@ const postSerie = async (req, res) => {
     try {
       sortData = parseSort(req.body.sort);
     } catch (error) {
-      if (uploadedPhotoPath) await removeFileIfExists(uploadedPhotoPath);
       return res.status(400).json({ error: 'Invalid categories JSON' });
     }
 
     if (!name || !Array.isArray(sortData) || sortData.length === 0 || !photoFile) {
-      if (uploadedPhotoPath) await removeFileIfExists(uploadedPhotoPath);
       return res.status(400).json({ error: 'Name, categories, and photo are required' });
     }
 
-    const serieFolderName = safeFolderName(name);
-    const serieDir = path.join(uploadsRoot, serieFolderName);
-    const photoPathForDb = path.join(serieFolderName, photoFile.filename).replace(/\\/g, '/');
-
-    await fs.mkdir(serieDir, { recursive: true });
-    await fs.rename(uploadedPhotoPath, path.join(serieDir, photoFile.filename));
+    const photoBlob = await put(`series/${name}-${Date.now()}-${photoFile.originalname}`, photoFile.buffer, {
+      access: 'public',
+    });
 
     const newSerie = await Serie.create({
       name,
       sort: sortData,
-      photo: photoPathForDb,
+      photo: photoBlob.url,
     });
 
     return res.status(201).json(newSerie);
@@ -104,14 +65,9 @@ const delSerie = async (req, res) => {
       return res.status(404).json({ error: 'Serie not found' });
     }
 
-    const foldersToRemove = new Set([path.join(uploadsRoot, safeFolderName(serie.name))]);
-
-    if (serie.photo) {
-      const photoPath = path.join(uploadsRoot, serie.photo);
-      foldersToRemove.add(path.dirname(photoPath));
+    if (serie.photo?.startsWith('http')) {
+      await del(serie.photo);
     }
-
-    await Promise.all([...foldersToRemove].map(removeFolderIfExists));
 
     return res.json(serie);
   } catch (error) {

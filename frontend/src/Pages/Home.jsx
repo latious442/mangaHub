@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
-import { API } from '../config/api'
+import { API, assetUrl } from '../config/api'
 
 export default function Home() {
   const [books, setBooks] = useState([])
@@ -264,7 +264,7 @@ export default function Home() {
             >
               <div className="aspect-[3/4] overflow-hidden bg-gray-800">
                 <img
-                  src={`${API}/uploads/${item.image}`}
+                  src={assetUrl(item.image)}
                   alt={item.name}
                   className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                   onError={(e) => {

@@ -13,16 +13,17 @@ const bcrypt = require('bcrypt');
 const { randomInt } = require('node:crypto');
 const User = require('./models/User');
 const Pay = require('./models/Pay');
+const Otp = require('./models/Otp');
 const AuthMiddleware = require('./middleware/AuthMiddleware');
 const AdminMiddleware = require('./middleware/AdminMiddleware');
 const { createVerifiedUser, formatCreateUserError, setJwtCookie, setVipCookie } = require('./controllers/homeController');
 const createToken = require('./helpers/createToken');
 const vipToken = require('./helpers/vipToken');
-dotenv.config();
+const connectDB = require('./db');
+dotenv.config({ path: __dirname + '/.env' });
 
 const app = express();
 const port = process.env.PORT || 3000;
-const url = process.env.URL;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 app.use(express.static('public'));
@@ -35,15 +36,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-async function connectToAtlas() {
-  try {
-    await mongoose.connect(url);
-    console.log('Connected to MongoDB Atlas');
-  } catch (error) {
-    console.error('Error connecting to MongoDB:', error);
-  }
-}
-connectToAtlas();
+connectDB().catch((err) => console.error('MongoDB connection error:', err));
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -53,9 +46,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const otpByEmail = new Map()
-const passwordResetOtpByEmail = new Map()
-const OTP_TTL_MS = 10 * 60 * 1000
 const SALT_ROUNDS = 10
 const VIP_DURATIONS = {
   '1m': { jwt: '30d', label: '1 month', maxAge: 30 * 24 * 60 * 60 * 1000 },
@@ -68,39 +58,49 @@ function normalizeVipDuration(duration) {
 }
 
 function storePendingRegistration(email, { otp, name, password }) {
-  otpByEmail.set(email.toLowerCase(), {
+  return Otp.create({
+    email: email.toLowerCase(),
     otp: String(otp),
     name: String(name).trim(),
     password: String(password),
-    expiresAt: Date.now() + OTP_TTL_MS,
+    type: 'registration',
   })
 }
 
-function getPendingRegistration(email) {
-  const entry = otpByEmail.get(email.toLowerCase())
-  if (!entry) return null
-  if (Date.now() > entry.expiresAt) {
-    otpByEmail.delete(email.toLowerCase())
-    return null
+async function getPendingRegistration(email) {
+  const entry = await Otp.findOne({
+    email: email.toLowerCase(),
+    type: 'registration',
+  }).sort({ createdAt: -1 });
+  if (!entry) return null;
+  return {
+    otp: entry.otp,
+    name: entry.name,
+    password: entry.password,
+    expiresAt: entry.createdAt.getTime() + 10 * 60 * 1000,
+    _id: entry._id,
   }
-  return entry
 }
 
 function storePendingPasswordReset(email, otp) {
-  passwordResetOtpByEmail.set(email.toLowerCase(), {
+  return Otp.create({
+    email: email.toLowerCase(),
     otp: String(otp),
-    expiresAt: Date.now() + OTP_TTL_MS,
+    type: 'password_reset',
   })
 }
 
-function getPendingPasswordReset(email) {
-  const entry = passwordResetOtpByEmail.get(email.toLowerCase())
-  if (!entry) return null
-  if (Date.now() > entry.expiresAt) {
-    passwordResetOtpByEmail.delete(email.toLowerCase())
-    return null
+async function getPendingPasswordReset(email) {
+  const entry = await Otp.findOne({
+    email: email.toLowerCase(),
+    type: 'password_reset',
+  }).sort({ createdAt: -1 });
+  if (!entry) return null;
+  return {
+    otp: entry.otp,
+    expiresAt: entry.createdAt.getTime() + 10 * 60 * 1000,
+    _id: entry._id,
   }
-  return entry
 }
 
 app.use('/', homeRoutes);
@@ -142,7 +142,7 @@ app.post('/send-email', async (req, res) => {
     }
 
     const otp = randomInt(1000, 9999)
-    storePendingRegistration(trimmedEmail, {
+    await storePendingRegistration(trimmedEmail, {
       otp,
       name: trimmedName,
       password: String(password),
@@ -183,7 +183,7 @@ app.post('/send-email/again', async (req, res) => {
     
 
     const otp = randomInt(1000, 9999)
-    storePendingPasswordReset(trimmedEmail, otp)
+    await storePendingPasswordReset(trimmedEmail, otp)
 
     const info = await transporter.sendMail({
       from: process.env.EMAIL_USER,
@@ -216,8 +216,13 @@ app.post('/verify-otp/again', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' })
     }
 
-    const pending = getPendingPasswordReset(trimmedEmail)
+    const pending = await getPendingPasswordReset(trimmedEmail)
     if (!pending) {
+      return res.status(401).json({ ok: false, error: 'OTP expired or not found. Please request a new code.' })
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      await Otp.deleteOne({ _id: pending._id });
       return res.status(401).json({ ok: false, error: 'OTP expired or not found. Please request a new code.' })
     }
 
@@ -236,7 +241,7 @@ app.post('/verify-otp/again', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'User not found' })
     }
 
-    passwordResetOtpByEmail.delete(trimmedEmail)
+    await Otp.deleteOne({ _id: pending._id })
     return res.json({
       ok: true,
       message: 'Password reset successfully',
@@ -374,8 +379,13 @@ app.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'OTP is required' })
     }
 
-    const pending = getPendingRegistration(trimmedEmail)
+    const pending = await getPendingRegistration(trimmedEmail)
     if (!pending) {
+      return res.status(401).json({ ok: false, error: 'OTP expired or not found. Please request a new code.' })
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      await Otp.deleteOne({ _id: pending._id });
       return res.status(401).json({ ok: false, error: 'OTP expired or not found. Please request a new code.' })
     }
 
@@ -391,7 +401,7 @@ app.post('/verify-otp', async (req, res) => {
     const token = createToken(newUser._id)
     setJwtCookie(res, token)
 
-    otpByEmail.delete(trimmedEmail)
+    await Otp.deleteOne({ _id: pending._id })
     return res.status(201).json({
       ok: true,
       token,
@@ -421,6 +431,9 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not found' })
 })
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+  });
+}
+module.exports = app;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { API } from '../config/api'
+import { API, assetUrl } from '../config/api'
 
 export default function View() {
   const { id } = useParams()
@@ -92,7 +92,7 @@ export default function View() {
         <div className="mx-auto mt-6 max-w-6xl overflow-hidden rounded-lg bg-gray-900">
       
           <object
-  data={`${API}/uploads/${book.manga}`}
+  data={assetUrl(book.manga)}
   type="application/pdf"
   width="100%"
   height="700px"
@@ -100,7 +100,7 @@ export default function View() {
 >
   <p>
     Your browser does not support embedded PDFs.
-    <a href={`${API}/uploads/${book.manga}`} target="_blank" rel="noreferrer">
+    <a href={assetUrl(book.manga)} target="_blank" rel="noreferrer">
       Open PDF
     </a>
   </p>

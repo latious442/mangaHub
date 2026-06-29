@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const secret = process.env.JWT_SECRET || 'myooo';
+const secret = process.env.JWT_SECRET;
 
 const AuthMiddleware = (req, res, next) => {
     const token = req.cookies.jwt;
