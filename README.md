@@ -1,20 +1,79 @@
-# mangaHub
-MangaHub is my project for who are looking for e-book library with business purposes.
-If you enter /ad or /admin next to its http,login page for admin will appear.For admin,I have already set up name and password.In admin page ,I boost the management system which leads to user-friendly dashboard with del,adding serie and manga,user.For business purpose,user can get vip access by sending payment ss to admin in member page.Admin can access vip feature to users with limited duration manually.Once you are vip member,you can read all books including manga that are recored as vip book.For user-register and login,there is also otp feature I added.
+# MangaHub
 
-Tech Stacks:
- -Mongo
- -Express
- -React
- -Node
+MangaHub is an e-book and manga library web application with an admin dashboard and VIP subscription features for business use.
 
-Command for running projects
- -cd frontend
-   npm run dev
+## Features
+- Admin dashboard for managing series, manga, and users
+- VIP access flow (admins grant VIP status manually after payment verification)
+- OTP-based user registration and login
+- File uploads for manga and cover images
 
--cd backend
-  node index.js
+## Tech stack
+- MongoDB
+- Express
+- React (Vite)
+- Node.js
 
+## Prerequisites
+- Node.js (16+ recommended)
+- npm or yarn
+- MongoDB (local or hosted)
 
+## Environment variables
+Create a `.env` file in the `backend` folder and set at least:
+
+- `MONGO_URI` — MongoDB connection string
+- `JWT_SECRET` — secret used for signing JWTs
+- `PORT` — backend port (optional, default 3000)
+- `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS` — for sending OTP/emails
+- `FRONTEND_URL` — URL where the frontend is served (optional)
+
+## Install
+Run the following to install dependencies:
+
+```bash
+cd backend
+npm install
+cd ../frontend
+npm install
+```
+
+## Run (development)
+
+Backend:
+
+```bash
+cd backend
+npm run start
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Note: the backend can also be started directly with `node index.js` if preferred.
+
+## Admin setup
+- Do not commit admin credentials. To create an admin account, either use the registration endpoint and promote the user in the database, or add a short seed script to create the initial admin user from environment variables.
+- Example manual promotion (Mongo shell):
+
+```js
+db.users.updateOne({ email: 'you@example.com' }, { $set: { role: 'admin' } })
+```
+
+## Security & privacy notes
+- Never store plaintext credentials in the repository. Use `.env` files and a secrets manager in production.
+- The current VIP flow is manual (admins verify payment screenshots). Consider integrating a payment provider (Stripe, PayPal) for automated billing and receipts.
+
+## Contributing
+- Fork the repo, create a feature branch, open a PR with a clear description.
+
+## License
+Add a license file if you plan to open-source this project.
+
+---
 Developed by MyoMyatAung
-Duration: 3.6.2026 to 28.6.2006
+Duration: 03.06.2026 — 28.06.2026
